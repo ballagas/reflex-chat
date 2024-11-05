@@ -17,7 +17,7 @@ export OPENAI_API_KEY="YOUR_OPENAI_API_KEY" # replace me!
 ### 🧬 1. Clone the Repo
 
 ```bash
-git clone https://github.com/reflex-dev/reflex-chat.git
+git clone https://github.com/ballagas/reflex-chat.git
 ```
 
 ### 📦 2. Install Reflex
@@ -32,6 +32,16 @@ Install `pip` dependencies with the provided `requirements.txt`:
 
 ```bash
 pip install -r requirements.txt
+```
+
+Then install ollama
+
+https://ollama.com/download/
+
+Use the command line to install the Llama 3.2 model
+
+```bash
+ollama run llama3.2
 ```
 
 ### 🚀 3. Run the application
