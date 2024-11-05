@@ -1,6 +1,8 @@
 import os
 import reflex as rx
-from openai import OpenAI
+from langchain_ollama import ChatOllama
+from langchain.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 
 
 # Checking if the API key is set properly
@@ -76,18 +78,16 @@ class State(rx.State):
         if question == "":
             return
 
-        model = self.openai_process_question
-
-        async for value in model(question):
+        # Stream the response
+        async for value in self.openai_process_question(question):
             yield value
 
     async def openai_process_question(self, question: str):
         """Get the response from the API.
 
         Args:
-            form_data: A dict with the current question.
+            question: The question to process.
         """
-
         # Add the question to the list of questions.
         qa = QA(question=question, answer="")
         self.chats[self.current_chat].append(qa)
@@ -96,41 +96,30 @@ class State(rx.State):
         self.processing = True
         yield
 
-        # Build the messages.
-        messages = [
-            {
-                "role": "system",
-                "content": "You are a friendly chatbot named Reflex. Respond in markdown.",
-            }
-        ]
-        for qa in self.chats[self.current_chat]:
-            messages.append({"role": "user", "content": qa.question})
-            messages.append({"role": "assistant", "content": qa.answer})
-
-        # Remove the last mock answer.
-        messages = messages[:-1]
-
-        # Start a new session to answer the question.
-        session = OpenAI().chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-3.5-turbo"),
-            messages=messages,
-            stream=True,
+        prompt = PromptTemplate(
+            template="""You are an assistant for question-answering tasks.
+            Use the following documents to answer the question.
+            If you don't know the answer, just say that you don't know.
+            Question: {question}
+            Answer:
+            """,
+            input_variables=["question"],
         )
 
-        # Stream the results, yielding after every word.
-        for item in session:
-            if hasattr(item.choices[0].delta, "content"):
-                answer_text = item.choices[0].delta.content
-                # Ensure answer_text is not None before concatenation
-                if answer_text is not None:
-                    self.chats[self.current_chat][-1].answer += answer_text
-                else:
-                    # Handle the case where answer_text is None, perhaps log it or assign a default value
-                    # For example, assigning an empty string if answer_text is None
-                    answer_text = ""
-                    self.chats[self.current_chat][-1].answer += answer_text
-                self.chats = self.chats
-                yield
+        llm = ChatOllama(
+            model="llama3.2",
+            temperature=0,
+            streaming=True
+        )
+
+        # Create a chain combining the prompt template and LLM
+        llm_chain = prompt | llm | StrOutputParser()
+
+        # Stream the response
+        async for chunk in llm_chain.astream({"question": question}):
+            self.chats[self.current_chat][-1].answer += chunk
+            self.chats = self.chats
+            yield
 
         # Toggle the processing flag.
         self.processing = False
